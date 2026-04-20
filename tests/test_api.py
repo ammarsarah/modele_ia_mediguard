@@ -320,6 +320,13 @@ class TestMindCareModule:
         assert "empathic_message" in empathy
         assert "suggested_action" in empathy
 
+    def test_fatigue_keyword_triggers_fatigue_empathy(self):
+        text = "Je suis FATIGUÉ depuis plusieurs jours après la chimio."
+        r = client.post("/mindcare/analyze", json={"text": text})
+        body = r.json()
+        assert body["sentiment_analysis"]["dominant_emotion"] == "fatigue"
+        assert "fatigue" in body["empathic_response"]["empathic_message"].lower()
+
     def test_summarize_endpoint(self):
         long_text = (
             "Je me sens vraiment épuisé ces derniers jours. "
@@ -331,6 +338,11 @@ class TestMindCareModule:
         assert r.status_code == 200
         body = r.json()
         assert "summary" in body
+        assert len(body["summary"].splitlines()) == 3
+
+    def test_summarize_short_text_still_returns_three_lines(self):
+        r = client.post("/mindcare/summarize", json={"text": "Je suis très fatigué aujourd'hui."})
+        body = r.json()
         assert len(body["summary"].splitlines()) == 3
 
     def test_text_too_short_returns_422(self):

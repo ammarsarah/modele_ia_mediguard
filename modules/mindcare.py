@@ -186,6 +186,17 @@ def _contains_any_keyword(text: str, keywords: list[str]) -> bool:
     return any(kw in text_lower for kw in keywords)
 
 
+def _detect_context_emotion(text: str) -> Optional[str]:
+    """
+    Détecte une émotion contextuelle explicite (fatigue/tristesse) via mots-clés FR.
+    """
+    if _contains_any_keyword(text, _FATIGUE_KEYWORDS_FR):
+        return "fatigue"
+    if _contains_any_keyword(text, _SADNESS_KEYWORDS_FR):
+        return "sadness"
+    return None
+
+
 def _french_keyword_override(text: str) -> Optional[str]:
     """
     Retourne une émotion si des mots-clés français emblématiques sont détectés,
@@ -224,6 +235,7 @@ def analyze_sentiment(text: str) -> dict:
 
     # 2. Émotion par mots-clés FR (override rapide)
     fr_override = _french_keyword_override(text)
+    context_emotion = _detect_context_emotion(text)
 
     # 3. Classification via le modèle
     pipe = _get_emotion_pipeline()
@@ -243,12 +255,17 @@ def analyze_sentiment(text: str) -> dict:
     if fr_override and all_scores.get(dominant_label, 0) < 0.5:
         dominant_emotion = fr_override
 
-    return {
+    result = {
         "dominant_emotion": dominant_emotion,
         "confidence": round(all_scores.get(dominant_label, 0), 4),
         "all_scores": all_scores,
         "crisis_detected": crisis,
     }
+    # Priorité d'override : contexte patient explicite (fatigue/tristesse) > score modèle.
+    if context_emotion:
+        result["dominant_emotion"] = context_emotion
+        result["context_override"] = f"{context_emotion}_keyword"
+    return result
 
 
 def generate_empathic_response(emotion: str) -> dict:
@@ -289,9 +306,10 @@ def _format_summary_three_lines(text: str) -> str:
     else:
         words = clean.split()
         n = len(words)
-        step = max(1, n // 3)
-        split_1 = min(step, n)
-        split_2 = min(step * 2, n)
+        first_chunk_size = (n + 2) // 3
+        second_chunk_size = (n + 1) // 3
+        split_1 = min(first_chunk_size, n)
+        split_2 = min(first_chunk_size + second_chunk_size, n)
         lines = [
             " ".join(words[:split_1]).strip(),
             " ".join(words[split_1:split_2]).strip(),
@@ -365,18 +383,6 @@ def analyze_journal(text: str) -> dict:
     """
     sentiment_result = analyze_sentiment(text)
     emotion = sentiment_result["dominant_emotion"]
-
-    # Exigence fonctionnelle : mots-clés explicites "triste"/"fatigué"
-    # déclenchent systématiquement une réponse empathique adaptée.
-    if _contains_any_keyword(text, _FATIGUE_KEYWORDS_FR):
-        emotion = "fatigue"
-        sentiment_result["dominant_emotion"] = "fatigue"
-        sentiment_result["context_override"] = "fatigue_keyword"
-    elif _contains_any_keyword(text, _SADNESS_KEYWORDS_FR):
-        emotion = "sadness"
-        sentiment_result["dominant_emotion"] = "sadness"
-        sentiment_result["context_override"] = "sadness_keyword"
-
     empathy_result = generate_empathic_response(emotion)
     summary_result = summarize_journal(text)
 

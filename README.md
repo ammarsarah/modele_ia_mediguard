@@ -45,7 +45,7 @@ Le projet utilise les librairies principales suivantes :
 Installation (recommandée via `requirements.txt`) :
 
 ```bash
-cd /home/runner/work/modele_ia_mediguard/modele_ia_mediguard
+cd <project-root>
 python -m pip install -r requirements.txt
 ```
 
@@ -54,7 +54,7 @@ python -m pip install -r requirements.txt
 ## ▶️ Comment lancer le projet (CMD / terminal)
 
 ```bash
-cd /home/runner/work/modele_ia_mediguard/modele_ia_mediguard
+cd <project-root>
 python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
@@ -67,7 +67,7 @@ API docs :
 ## 🧪 Lancer les tests
 
 ```bash
-cd /home/runner/work/modele_ia_mediguard/modele_ia_mediguard
+cd <project-root>
 python -m pytest tests/test_api.py -v
 ```
 
