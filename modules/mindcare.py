@@ -23,6 +23,8 @@ import re
 from functools import lru_cache
 from typing import Optional
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
