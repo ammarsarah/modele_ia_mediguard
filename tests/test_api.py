@@ -331,6 +331,7 @@ class TestMindCareModule:
         assert r.status_code == 200
         body = r.json()
         assert "summary" in body
+        assert len(body["summary"].splitlines()) == 3
 
     def test_text_too_short_returns_422(self):
         r = client.post("/mindcare/analyze", json={"text": "ab"})  # < min_length=3
@@ -456,6 +457,12 @@ class TestGenerateReport:
         r = client.post("/generate-report", json=self._REPORT_PAYLOAD)
         recs = r.json()["recommendations"]
         assert any("respiration" in rec.lower() for rec in recs)
+
+    def test_single_recommendation_field_added(self):
+        """Si stress > 7, le champ recommendation (singulier) doit être présent."""
+        r = client.post("/generate-report", json=self._REPORT_PAYLOAD)
+        body = r.json()
+        assert body["recommendation"] == "Exercice de respiration guidée"
 
     def test_global_risk_level_valid(self):
         r = client.post("/generate-report", json=self._REPORT_PAYLOAD)

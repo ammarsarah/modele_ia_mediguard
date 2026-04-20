@@ -49,6 +49,14 @@ _ALL_CRISIS_KEYWORDS = _CRISIS_KEYWORDS_FR + _CRISIS_KEYWORDS_EN
 # ---------------------------------------------------------------------------
 
 _EMPATHY_TEMPLATES: dict[str, dict] = {
+    "fatigue": {
+        "response": (
+            "Je comprends ta fatigue, c'est un combat courageux que tu mènes. "
+            "Prends ce ressenti au sérieux et avance à ton rythme."
+        ),
+        "action": "Méditation anti-fatigue (respiration + scan corporel, 5 min) recommandée.",
+        "resource": "https://mediguard360.app/meditation/anti-fatigue",
+    },
     "sadness": {
         "response": (
             "Je comprends ta tristesse, c'est tout à fait normal de ressentir cela "
@@ -172,6 +180,12 @@ _FATIGUE_KEYWORDS_FR = ["fatigué", "épuisé", "à bout", "vidé", "sans énerg
 _SADNESS_KEYWORDS_FR = ["triste", "déprimé", "malheureux", "chagrin", "découragé"]
 
 
+def _contains_any_keyword(text: str, keywords: list[str]) -> bool:
+    """Retourne True si au moins un mot-clé est présent dans le texte."""
+    text_lower = text.lower()
+    return any(kw in text_lower for kw in keywords)
+
+
 def _french_keyword_override(text: str) -> Optional[str]:
     """
     Retourne une émotion si des mots-clés français emblématiques sont détectés,
@@ -261,6 +275,28 @@ def generate_empathic_response(emotion: str) -> dict:
     }
 
 
+def _format_summary_three_lines(text: str) -> str:
+    """
+    Formate un texte en exactement 3 lignes pour l'interface praticien.
+    """
+    clean = re.sub(r"\s+", " ", text).strip()
+    if not clean:
+        return "-\n-\n-"
+
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean) if s.strip()]
+    if len(sentences) >= 3:
+        lines = sentences[:3]
+    else:
+        words = clean.split()
+        chunks = np.array_split(np.array(words, dtype=object), 3)
+        lines = [" ".join(chunk.tolist()).strip() for chunk in chunks]
+
+    lines = [line if line else "-" for line in lines[:3]]
+    while len(lines) < 3:
+        lines.append("-")
+    return "\n".join(lines)
+
+
 def summarize_journal(text: str, max_length: int = 130, min_length: int = 40) -> dict:
     """
     Condense le journal thérapeutique en 3 lignes pour le praticien.
@@ -283,11 +319,12 @@ def summarize_journal(text: str, max_length: int = 130, min_length: int = 40) ->
 
     # Le modèle de résumé nécessite un texte suffisamment long
     if word_count < 30:
+        summary_text = _format_summary_three_lines(text)
         return {
-            "summary": text,
+            "summary": summary_text,
             "original_length": word_count,
-            "summary_length": word_count,
-            "note": "Texte trop court pour être résumé – retourné tel quel.",
+            "summary_length": len(summary_text.split()),
+            "note": "Texte court détecté – résumé formaté automatiquement en 3 lignes.",
         }
 
     result = pipe(
@@ -296,7 +333,7 @@ def summarize_journal(text: str, max_length: int = 130, min_length: int = 40) ->
         min_length=min_length,
         do_sample=False,
     )
-    summary_text: str = result[0]["summary_text"]
+    summary_text: str = _format_summary_three_lines(result[0]["summary_text"])
 
     return {
         "summary": summary_text,
@@ -321,6 +358,18 @@ def analyze_journal(text: str) -> dict:
     """
     sentiment_result = analyze_sentiment(text)
     emotion = sentiment_result["dominant_emotion"]
+
+    # Exigence fonctionnelle : mots-clés explicites "triste"/"fatigué"
+    # déclenchent systématiquement une réponse empathique adaptée.
+    if _contains_any_keyword(text, _FATIGUE_KEYWORDS_FR):
+        emotion = "fatigue"
+        sentiment_result["dominant_emotion"] = "fatigue"
+        sentiment_result["context_override"] = "fatigue_keyword"
+    elif _contains_any_keyword(text, _SADNESS_KEYWORDS_FR):
+        emotion = "sadness"
+        sentiment_result["dominant_emotion"] = "sadness"
+        sentiment_result["context_override"] = "sadness_keyword"
+
     empathy_result = generate_empathic_response(emotion)
     summary_result = summarize_journal(text)
 
