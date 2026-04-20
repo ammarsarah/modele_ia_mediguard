@@ -49,6 +49,14 @@ _ALL_CRISIS_KEYWORDS = _CRISIS_KEYWORDS_FR + _CRISIS_KEYWORDS_EN
 # ---------------------------------------------------------------------------
 
 _EMPATHY_TEMPLATES: dict[str, dict] = {
+    "fatigue": {
+        "response": (
+            "Je comprends ta fatigue, c'est un combat courageux que tu mènes. "
+            "Prends ce ressenti au sérieux et avance à ton rythme."
+        ),
+        "action": "Méditation anti-fatigue (respiration + scan corporel, 5 min) recommandée.",
+        "resource": "https://mediguard360.app/meditation/anti-fatigue",
+    },
     "sadness": {
         "response": (
             "Je comprends ta tristesse, c'est tout à fait normal de ressentir cela "
@@ -172,6 +180,23 @@ _FATIGUE_KEYWORDS_FR = ["fatigué", "épuisé", "à bout", "vidé", "sans énerg
 _SADNESS_KEYWORDS_FR = ["triste", "déprimé", "malheureux", "chagrin", "découragé"]
 
 
+def _contains_any_keyword(text: str, keywords: list[str]) -> bool:
+    """Retourne True si au moins un mot-clé est présent dans le texte."""
+    text_lower = text.lower()
+    return any(kw in text_lower for kw in keywords)
+
+
+def _detect_context_emotion(text: str) -> Optional[str]:
+    """
+    Détecte une émotion contextuelle explicite (fatigue/tristesse) via mots-clés FR.
+    """
+    if _contains_any_keyword(text, _FATIGUE_KEYWORDS_FR):
+        return "fatigue"
+    if _contains_any_keyword(text, _SADNESS_KEYWORDS_FR):
+        return "sadness"
+    return None
+
+
 def _french_keyword_override(text: str) -> Optional[str]:
     """
     Retourne une émotion si des mots-clés français emblématiques sont détectés,
@@ -210,6 +235,7 @@ def analyze_sentiment(text: str) -> dict:
 
     # 2. Émotion par mots-clés FR (override rapide)
     fr_override = _french_keyword_override(text)
+    context_emotion = _detect_context_emotion(text)
 
     # 3. Classification via le modèle
     pipe = _get_emotion_pipeline()
@@ -229,12 +255,17 @@ def analyze_sentiment(text: str) -> dict:
     if fr_override and all_scores.get(dominant_label, 0) < 0.5:
         dominant_emotion = fr_override
 
-    return {
+    result = {
         "dominant_emotion": dominant_emotion,
         "confidence": round(all_scores.get(dominant_label, 0), 4),
         "all_scores": all_scores,
         "crisis_detected": crisis,
     }
+    # Priorité d'override : contexte patient explicite (fatigue/tristesse) > score modèle.
+    if context_emotion:
+        result["dominant_emotion"] = context_emotion
+        result["context_override"] = f"{context_emotion}_keyword"
+    return result
 
 
 def generate_empathic_response(emotion: str) -> dict:
@@ -261,6 +292,36 @@ def generate_empathic_response(emotion: str) -> dict:
     }
 
 
+def _format_summary_three_lines(text: str) -> str:
+    """
+    Formate un texte en exactement 3 lignes pour l'interface praticien.
+    """
+    clean = re.sub(r"\s+", " ", text).strip()
+    if not clean:
+        return "-\n-\n-"
+
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean) if s.strip()]
+    if len(sentences) >= 3:
+        lines = sentences[:3]
+    else:
+        words = clean.split()
+        n = len(words)
+        first_chunk_size = (n + 2) // 3
+        second_chunk_size = (n + 1) // 3
+        split_1 = min(first_chunk_size, n)
+        split_2 = min(first_chunk_size + second_chunk_size, n)
+        lines = [
+            " ".join(words[:split_1]).strip(),
+            " ".join(words[split_1:split_2]).strip(),
+            " ".join(words[split_2:]).strip(),
+        ]
+
+    lines = [line if line else "-" for line in lines[:3]]
+    while len(lines) < 3:
+        lines.append("-")
+    return "\n".join(lines)
+
+
 def summarize_journal(text: str, max_length: int = 130, min_length: int = 40) -> dict:
     """
     Condense le journal thérapeutique en 3 lignes pour le praticien.
@@ -283,11 +344,12 @@ def summarize_journal(text: str, max_length: int = 130, min_length: int = 40) ->
 
     # Le modèle de résumé nécessite un texte suffisamment long
     if word_count < 30:
+        summary_text = _format_summary_three_lines(text)
         return {
-            "summary": text,
+            "summary": summary_text,
             "original_length": word_count,
-            "summary_length": word_count,
-            "note": "Texte trop court pour être résumé – retourné tel quel.",
+            "summary_length": len(summary_text.split()),
+            "note": "Texte court détecté – résumé formaté automatiquement en 3 lignes.",
         }
 
     result = pipe(
@@ -296,7 +358,7 @@ def summarize_journal(text: str, max_length: int = 130, min_length: int = 40) ->
         min_length=min_length,
         do_sample=False,
     )
-    summary_text: str = result[0]["summary_text"]
+    summary_text: str = _format_summary_three_lines(result[0]["summary_text"])
 
     return {
         "summary": summary_text,

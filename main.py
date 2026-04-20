@@ -379,8 +379,10 @@ def generate_report(data: ReportInput) -> dict:
 
         # --- Recommandations automatiques ---
         recommendations: list[str] = []
+        recommendation: Optional[str] = None
 
         if data.epilepsy.stress_level > 7:
+            recommendation = "Exercice de respiration guidée"
             recommendations.append(
                 "Exercice de respiration guidée (technique 4-7-8) recommandé "
                 "pour réduire le niveau de stress élevé."
@@ -396,7 +398,7 @@ def generate_report(data: ReportInput) -> dict:
                 "Fatigue sévère détectée : évaluer l'anémie et adapter le protocole de traitement."
             )
 
-        if sentiment["dominant_emotion"] in ("sadness", "fear"):
+        if sentiment["dominant_emotion"] in ("sadness", "fear", "fatigue"):
             recommendations.append(
                 "État émotionnel fragile détecté : orienter vers un suivi psychologique."
             )
@@ -439,6 +441,8 @@ def generate_report(data: ReportInput) -> dict:
                 "et ne constitue pas un diagnostic médical."
             ),
         }
+        if recommendation:
+            report["recommendation"] = recommendation
 
         return report
 
