@@ -458,7 +458,7 @@ class TestGenerateReport:
         recs = r.json()["recommendations"]
         assert any("respiration" in rec.lower() for rec in recs)
 
-    def test_single_recommendation_field_added(self):
+    def test_recommendation_field_present_when_stress_high(self):
         """Si stress > 7, le champ recommendation (singulier) doit être présent."""
         r = client.post("/generate-report", json=self._REPORT_PAYLOAD)
         body = r.json()

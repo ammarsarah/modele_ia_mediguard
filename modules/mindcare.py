@@ -23,8 +23,6 @@ import re
 from functools import lru_cache
 from typing import Optional
 
-import numpy as np
-
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -290,8 +288,15 @@ def _format_summary_three_lines(text: str) -> str:
         lines = sentences[:3]
     else:
         words = clean.split()
-        chunks = np.array_split(np.array(words, dtype=object), 3)
-        lines = [" ".join(chunk.tolist()).strip() for chunk in chunks]
+        n = len(words)
+        step = max(1, n // 3)
+        split_1 = min(step, n)
+        split_2 = min(step * 2, n)
+        lines = [
+            " ".join(words[:split_1]).strip(),
+            " ".join(words[split_1:split_2]).strip(),
+            " ".join(words[split_2:]).strip(),
+        ]
 
     lines = [line if line else "-" for line in lines[:3]]
     while len(lines) < 3:
